@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>🌾 ระบบทำนายราคาข้าวและข้อมูลย้อนหลัง</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://code.highcharts.com/highcharts.js"></script>
+    <script src="https://code.highcharts.com/highcharts-3d.js"></script>
+    <script src="https://code.highcharts.com/modules/exporting.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+    <style>
+        body {
+            font-family: "Kanit", sans-serif;
+            background: #f4f9f4;
+            padding: 20px;
+            color: #333;
+        }
+
+        h1,
+        h2 {
+            text-align: center;
+            color: #2e7d32;
+        }
+
+        section {
+            background: #fff;
+            padding: 20px;
+            margin: 20px auto;
+            border-radius: 10px;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+            max-width: 960px;
+        }
+
+        form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: bold;
+            color: #2e7d32;
+        }
+
+        select,
+        input {
+            padding: 8px;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #2e7d32;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #276529;
+        }
+
+        canvas {
+            margin: 20px auto;
+            display: block;
+            max-width: 900px;
+        }
+
+        .result-box {
+            background-color: #e8f5e9;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🌾 ระบบทำนายราคาข้าวและข้อมูลย้อนหลัง</h1>
+
+    <!-- ส่วนทำนายราคาข้าว -->
+    <section>
+        <h2>1. ทำนายราคาข้าว</h2>
+        <form method="post">
+            <input type="hidden" name="action" value="predict">
+
+            <label>จังหวัด:</label>
+            <select name="province" required>
+                {% for p in provinces %}
+                <option value="{{ p }}" {% if selected_province==p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+
+            <label>ปี:</label>
+            <input type="number" name="year" min="2020" value="{{ selected_year or 2024 }}" required>
+
+            <label>เดือน:</label>
+            <input type="number" name="month" min="1" max="12" value="{{ selected_month or 1 }}" required>
+
+            <label>ชนิดข้าว:</label>
+            <select name="rice_type" required>
+                <option value="RiceMali" {% if selected_rice_type=='RiceMali' %}selected{% endif %}>ข้าวหอมมะลิ</option>
+                <option value="Long grain" {% if selected_rice_type=='Long grain' %}selected{% endif %}>
+                    ข้าวเหนียวเมล็ดยาว</option>
+                <option value="Short grain" {% if selected_rice_type=='Short grain' %}selected{% endif %}>
+                    ข้าวเหนียวเมล็ดสั้น</option>
+            </select>
+
+            <button type="submit">พยากรณ์</button>
+        </form>
+
+        {% if prediction is not none %}
+        <div class="result-box">
+            📈 ราคาข้าวที่คาดการณ์: {{ "{:,.2f}".format(prediction) if prediction is number else prediction }} บาท
+        </div>
+        {% endif %}
+    </section>
+    <div class="container">
+        <h1>📈 Dashboard ราคาข้าว</h1>
+        <label for="yearSelect">เลือกปี:</label>
+        <select id="yearSelect"></select>
+        <label for="monthSelect">เลือกเดือน:</label>
+        <select id="monthSelect">
+            <option value="0">ทั้งหมด</option>
+            <option value="1">มกราคม</option>
+            <option value="2">กุมภาพันธ์</option>
+            <option value="3">มีนาคม</option>
+            <option value="4">เมษายน</option>
+            <option value="5">พฤษภาคม</option>
+            <option value="6">มิถุนายน</option>
+            <option value="7">กรกฎาคม</option>
+            <option value="8">สิงหาคม</option>
+            <option value="9">กันยายน</option>
+            <option value="10">ตุลาคม</option>
+            <option value="11">พฤศจิกายน</option>
+            <option value="12">ธันวาคม</option>
+        </select>
+
+        <label for="riceTypeSelect">เลือกชนิดข้าว:</label>
+        <select id="riceTypeSelect"></select>
+
+        <p id="minMaxText" style="margin-top: 10px; font-weight: bold;"></p>
+
+        <canvas id="lineChart" width="800" height="300"></canvas>
+        <div id="pieChart3D" style="width: 800px; height: 400px;"></div>
+
+
+    </div>
+    <div class="container1">
+        <hr />
+        <h2>🌧️ ปริมาณฝนเฉลี่ยรายเดือน</h2>
+        <label for="rainYearSelect">เลือกปีปริมาณฝน:</label>
+        <select id="rainYearSelect"></select>
+        <label for="rainMonthSelect">เลือกเดือนปริมาณฝน:</label>
+        <select id="rainMonthSelect">
+            <option value="0">ทั้งหมด</option>
+            <option value="1">มกราคม</option>
+            <option value="2">กุมภาพันธ์</option>
+            <option value="3">มีนาคม</option>
+            <option value="4">เมษายน</option>
+            <option value="5">พฤษภาคม</option>
+            <option value="6">มิถุนายน</option>
+            <option value="7">กรกฎาคม</option>
+            <option value="8">สิงหาคม</option>
+            <option value="9">กันยายน</option>
+            <option value="10">ตุลาคม</option>
+            <option value="11">พฤศจิกายน</option>
+            <option value="12">ธันวาคม</option>
+        </select>
+        <label for="provinceSelect">เลือกจังหวัด:</label>
+        <select id="provinceSelect"></select>
+
+
+        <canvas id="rainChart" width="800" height="300"></canvas>
+    </div>
+
+    <script>
+        const rainCSVUrl = "{{ url_for('static', filename='rain.csv') }}";
+        const riceCSVUrl = "{{ url_for('static', filename='rice.csv') }}";
+    </script>
+    <script type="module" src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+
+</html>

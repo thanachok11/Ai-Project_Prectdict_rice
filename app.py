@@ -5,8 +5,7 @@ import pickle
 import joblib
 
 # โหลดโมเดล
-with open('rain_models_all.pkl', 'rb') as f:
-    rain_models = pickle.load(f)
+rain_models = joblib.load('rain_models_all.joblib')
 
 rice_mali_model = joblib.load('rice_mali_model.pkl')
 glutinous_model = joblib.load('glutinous_rice_model.pkl')

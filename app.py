@@ -1,15 +1,17 @@
 import pandas as pd
 import numpy as np
 from flask import Flask, render_template, request
-import pickle
 import joblib
 
 # โหลดโมเดล
 rain_models = joblib.load('rain_models_all.joblib')
-
 rice_mali_model = joblib.load('rice_mali_model.pkl')
 glutinous_model = joblib.load('glutinous_rice_model.pkl')
 province_encoder = joblib.load('province_label_encoder.pkl')
+
+# โหลดข้อมูลราคาข้าวเวียดนาม
+vietnam_df = pd.read_csv('rice-Vietnam_price.csv')
+vietnam_df.columns = vietnam_df.columns.str.strip()
 
 # จังหวัดที่ใช้
 provinces = [p for p in ['ศรีสะเกษ', 'ร้อยเอ็ด', 'ยโสธร', 'สุรินทร์'] if p in province_encoder.classes_]
@@ -24,6 +26,7 @@ def index():
     selected_year = None
     selected_month = None
     selected_rice_type = None
+    v_rice_amt = None
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -48,9 +51,19 @@ def index():
             if not result.empty:
                 rain = result.iloc[0]['yhat']
                 encoded_province = province_encoder.transform([selected_province])[0]
-                input_data = pd.DataFrame([[encoded_province, selected_year, selected_month, rain]],
-                                          columns=['Province', 'YEAR', 'MONTH', 'Rainfall'])
 
+                # ดึงราคาข้าวเวียดนามจากไฟล์ตามปี-เดือน
+                vn_row = vietnam_df[(vietnam_df['YEAR'] == selected_year) & (vietnam_df['MONTH'] == selected_month)]
+                if not vn_row.empty:
+                    v_rice_amt = vn_row.iloc[0]['V_rice_amt']
+                else:
+                    v_rice_amt = 170000  # กรณีไม่มีข้อมูล
+
+                # สร้าง dataframe สำหรับทำนาย
+                input_data = pd.DataFrame([[encoded_province, selected_year, selected_month, rain, v_rice_amt]],
+                                          columns=['Province', 'YEAR', 'MONTH', 'Rainfall', 'V_rice_amt'])
+
+                # ทำนายราคาข้าวตามชนิด
                 if selected_rice_type == "RiceMali":
                     prediction = rice_mali_model.predict(input_data)[0]
                 elif selected_rice_type == "Long grain":
@@ -58,7 +71,6 @@ def index():
                 else:
                     prediction = glutinous_model.predict(input_data)[0][1]
 
-    # ส่งค่ากลับเฉพาะที่จำเป็นสำหรับการทำนาย
     return render_template(
         'index.html',
         provinces=provinces,
@@ -67,7 +79,8 @@ def index():
         selected_month=selected_month,
         selected_rice_type=selected_rice_type,
         prediction=prediction,
-        rain=rain
+        rain=rain,
+        v_rice_amt=v_rice_amt
     )
 
 

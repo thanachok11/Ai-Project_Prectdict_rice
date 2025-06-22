@@ -3,17 +3,19 @@ import numpy as np
 from flask import Flask, render_template, request
 import joblib
 
-# โหลดโมเดล
+# โหลดโมเดลและข้อมูล
 rain_models = joblib.load('rain_models_all.joblib')
 rice_mali_model = joblib.load('rice_mali_model.pkl')
 glutinous_model = joblib.load('glutinous_rice_model.pkl')
 province_encoder = joblib.load('province_label_encoder.pkl')
-
-# โหลดข้อมูลราคาข้าวเวียดนาม
 vietnam_df = pd.read_csv('rice-Vietnam_price.csv')
 vietnam_df.columns = vietnam_df.columns.str.strip()
 
-# จังหวัดที่ใช้
+# ✅ โหลดข้อมูลน้ำมัน
+oil_df = pd.read_csv('oil.csv')
+oil_df.columns = oil_df.columns.str.strip()
+
+# จังหวัดที่รองรับ
 provinces = [p for p in ['ศรีสะเกษ', 'ร้อยเอ็ด', 'ยโสธร', 'สุรินทร์'] if p in province_encoder.classes_]
 
 app = Flask(__name__)
@@ -27,6 +29,7 @@ def index():
     selected_month = None
     selected_rice_type = None
     v_rice_amt = None
+    diesel_price = None
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -52,18 +55,20 @@ def index():
                 rain = result.iloc[0]['yhat']
                 encoded_province = province_encoder.transform([selected_province])[0]
 
-                # ดึงราคาข้าวเวียดนามจากไฟล์ตามปี-เดือน
-                vn_row = vietnam_df[(vietnam_df['YEAR'] == selected_year) & (vietnam_df['MONTH'] == selected_month)]
-                if not vn_row.empty:
-                    v_rice_amt = vn_row.iloc[0]['V_rice_amt']
-                else:
-                    v_rice_amt = 170000  # กรณีไม่มีข้อมูล
+                # 🔹 ดึงราคา V_rice_amt ย้อนหลัง 7 ปี
+                years_back = list(range(selected_year - 7, selected_year))
+                vn_rows = vietnam_df[(vietnam_df['YEAR'].isin(years_back)) & (vietnam_df['MONTH'] == selected_month)]
+                v_rice_amt = vn_rows['V_rice_amt'].mean() if not vn_rows.empty else 520000
 
-                # สร้าง dataframe สำหรับทำนาย
-                input_data = pd.DataFrame([[encoded_province, selected_year, selected_month, rain, v_rice_amt]],
-                                          columns=['Province', 'YEAR', 'MONTH', 'Rainfall', 'V_rice_amt'])
+                # 🔹 ดึงราคาน้ำมันดีเซลย้อนหลัง 7 ปี
+                oil_rows = oil_df[(oil_df['YEAR'].isin(years_back)) & (oil_df['MONTH'] == selected_month)]
+                diesel_price = oil_rows['DieselPrice'].mean() if not oil_rows.empty else 32.0  # fallback
 
-                # ทำนายราคาข้าวตามชนิด
+                # ✅ เตรียมข้อมูลสำหรับโมเดล
+                input_data = pd.DataFrame([[encoded_province, selected_year, selected_month, rain, v_rice_amt, diesel_price]],
+                                          columns=['Province', 'YEAR', 'MONTH', 'Rainfall', 'V_rice_amt', 'DieselPrice'])
+
+                # ทำนายราคาข้าว
                 if selected_rice_type == "RiceMali":
                     prediction = rice_mali_model.predict(input_data)[0]
                 elif selected_rice_type == "Long grain":
@@ -80,9 +85,9 @@ def index():
         selected_rice_type=selected_rice_type,
         prediction=prediction,
         rain=rain,
-        v_rice_amt=v_rice_amt
+        v_rice_amt=v_rice_amt,
+        diesel_price=diesel_price
     )
-
 
 if __name__ == '__main__':
     app.run(debug=True)

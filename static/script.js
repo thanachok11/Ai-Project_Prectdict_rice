@@ -261,10 +261,10 @@ async function initDashboard() {
 
     const yearSelect = document.getElementById("yearSelect");
     const riceTypeSelect = document.getElementById("riceTypeSelect");
+    const monthSelect = document.getElementById("monthSelect"); // ✅ เพิ่มอันนี้
     const provinceSelect = document.getElementById("provinceSelect");
     const rainYearSelect = document.getElementById("rainYearSelect");
     const rainMonthSelect = document.getElementById("rainMonthSelect");
-
     // เติมปีราคาข้าว
     riceYears.forEach(y => {
         const opt = document.createElement('option');
@@ -308,6 +308,7 @@ async function initDashboard() {
     // ตั้งค่า default
     yearSelect.value = riceYears[0];
     riceTypeSelect.value = Object.keys(riceTypes)[0];
+    monthSelect.value = 0;  // ✅ ตั้งค่าดีฟอลต์
     provinceSelect.value = provinces[0];
     rainYearSelect.value = rainYears[0];
     rainMonthSelect.value = 0;
@@ -318,10 +319,10 @@ async function initDashboard() {
         updateRainChart();
     });
     riceTypeSelect.addEventListener("change", updateRiceCharts);
+    monthSelect.addEventListener("change", updateRiceCharts);  // ✅ เพิ่มอันนี้
     provinceSelect.addEventListener("change", updateRainChart);
     rainYearSelect.addEventListener("change", updateRainChart);
     rainMonthSelect.addEventListener("change", updateRainChart);
-
     // render ครั้งแรก
     updateRiceCharts();
     updateRainChart();
